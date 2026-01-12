@@ -421,7 +421,7 @@ class PhysicsInjector:
             # Apply collision to the mesh child
             mesh_path = f"{prim_path}/mesh"
             if stage.GetPrimAtPath(mesh_path).IsValid():
-                self.apply_collision(stage, mesh_path)
+                self.apply_collision(stage, mesh_path, collision_type=part.collision_type)
         
         # Create joints
         for joint in articulation_data.joints:

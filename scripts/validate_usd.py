@@ -118,12 +118,39 @@ def validate_physics_usd(usd_path: str) -> dict:
     # =========================================
     # Check 4: Collision Shapes
     # =========================================
+    # =========================================
+    # Check 4: Collision Shapes
+    # =========================================
     colliders = []
+    approx_types = {
+        "convexHull": 0,
+        "convexDecomposition": 0,
+        "mesh": 0, # Note: USD might use "none" for mesh, or empty string
+        "none": 0,
+        "other": 0
+    }
+    
     for prim in stage.Traverse():
         if prim.HasAPI(UsdPhysics.CollisionAPI):
             colliders.append(prim)
+            
+            # Check approximation
+            if prim.HasAPI(UsdPhysics.MeshCollisionAPI):
+                mesh_col = UsdPhysics.MeshCollisionAPI(prim)
+                approx = mesh_col.GetApproximationAttr().Get()
+                if approx in approx_types:
+                    approx_types[approx] += 1
+                else:
+                    approx_types["other"] += 1
     
     results["info"]["collider_count"] = len(colliders)
+    results["info"]["collision_types"] = approx_types
+    
+    # Analyze collision quality
+    if approx_types["none"] > 0:
+        results["warnings"].append(
+            f"{approx_types['none']} parts use 'none' approximation (triangle mesh) - slow and unstable"
+        )
     
     if len(colliders) == 0:
         results["warnings"].append(
@@ -299,6 +326,13 @@ def print_report(results: dict):
     print(f"   Rigid Bodies: {info.get('rigid_body_count', 0)}")
     print(f"   Kinematic Bodies: {info.get('kinematic_body_count', 0)}")
     print(f"   Colliders: {info.get('collider_count', 0)}")
+    
+    col_types = info.get('collision_types', {})
+    if col_types:
+        print(f"     - Convex Hull: {col_types.get('convexHull', 0)}")
+        print(f"     - Convex Decomp: {col_types.get('convexDecomposition', 0)}")
+        print(f"     - Triangle Mesh (None): {col_types.get('none', 0)}")
+        print(f"     - Other: {col_types.get('other', 0)}")
     
     print("\n⚖️  MASS:")
     print(f"   Explicit Mass: {info.get('bodies_with_explicit_mass', 0)} bodies")

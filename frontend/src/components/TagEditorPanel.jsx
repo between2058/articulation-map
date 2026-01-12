@@ -179,6 +179,38 @@ export function TagEditorPanel({
                 )}
             </div>
 
+            {/* Collision Settings Section */}
+            <div style={{
+                marginTop: 'var(--space-lg)',
+                paddingTop: 'var(--space-md)',
+                borderTop: '1px solid var(--border-color)'
+            }}>
+                <label className="form-label" style={{ color: 'var(--accent-primary)' }}>
+                    💥 Collision Settings
+                </label>
+
+                <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '11px' }}>
+                        Approximation Type
+                    </label>
+                    <select
+                        className="form-select"
+                        value={selectedPart.collisionType || 'convexHull'}
+                        onChange={(e) => handleChange('collisionType', e.target.value)}
+                    >
+                        <option value="convexHull">Convex Hull (Recommended)</option>
+                        <option value="mesh">Triangle Mesh (Slow)</option>
+                        <option value="convexDecomposition">Convex Decomposition</option>
+                        <option value="none">None (No Collision)</option>
+                    </select>
+                    <div className="text-muted mt-sm" style={{ fontSize: '10px' }}>
+                        <strong>Convex Hull:</strong> Fast, fills holes. Best for most parts.<br />
+                        <strong>Mesh:</strong> Exact shape but slow. Use sparingly.<br />
+                        <strong>Decomposition:</strong> For complex concave shapes (e.g. cups).
+                    </div>
+                </div>
+            </div>
+
             {/* Geometry info */}
             <div className="form-group mt-lg">
                 <label className="form-label">Geometry Info</label>

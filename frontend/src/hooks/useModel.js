@@ -27,6 +27,7 @@ const createDefaultPart = (parsed) => ({
     mass: null,  // null = auto-compute from density
     density: 1000,  // kg/m³ (water density as default)
     centerOfMass: null,  // null = auto-compute
+    collisionType: 'convexHull', // 'mesh' | 'convexHull' | 'convexDecomposition' | 'none'
 });
 
 // Default joint structure
@@ -201,6 +202,7 @@ export function useModel() {
                 mass: part.mass,
                 density: part.density,
                 center_of_mass: part.centerOfMass,
+                collision_type: part.collisionType,
             }));
 
             // Convert joints to API format

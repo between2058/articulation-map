@@ -69,6 +69,12 @@ class Part(BaseModel):
         default=None,
         description="Center of mass offset [x, y, z] relative to part origin"
     )
+    
+    # Collision properties
+    collision_type: Literal["mesh", "convexHull", "convexDecomposition", "none"] = Field(
+        default="convexHull",
+        description="Collision approximation type"
+    )
 
 
 class Joint(BaseModel):
