@@ -211,6 +211,71 @@ export function TagEditorPanel({
                 </div>
             </div>
 
+            {/* Physics Materials Section */}
+            <div style={{
+                marginTop: 'var(--space-lg)',
+                paddingTop: 'var(--space-md)',
+                borderTop: '1px solid var(--border-color)'
+            }}>
+                <label className="form-label" style={{ color: 'var(--accent-primary)' }}>
+                    🧶 Physics Material
+                </label>
+
+                <div className="flex gap-sm">
+                    <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>
+                            Static Friction
+                        </label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={selectedPart.staticFriction ?? 0.5}
+                            min="0"
+                            step="0.1"
+                            onChange={(e) => handleChange('staticFriction', parseFloat(e.target.value) || 0)}
+                        />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label" style={{ fontSize: '11px' }}>
+                            Dynamic Friction
+                        </label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={selectedPart.dynamicFriction ?? 0.5}
+                            min="0"
+                            step="0.1"
+                            onChange={(e) => handleChange('dynamicFriction', parseFloat(e.target.value) || 0)}
+                        />
+                    </div>
+                </div>
+
+                <div className="form-group mt-sm">
+                    <label className="form-label" style={{ fontSize: '11px' }}>
+                        Restitution (Bounciness) [0.0 - 1.0]
+                    </label>
+                    <div className="flex gap-sm items-center">
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={selectedPart.restitution ?? 0.0}
+                            onChange={(e) => handleChange('restitution', parseFloat(e.target.value))}
+                            style={{ flex: 1 }}
+                        />
+                        <span className="text-muted" style={{ fontSize: '11px', width: '30px' }}>
+                            {selectedPart.restitution ?? 0.0}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="text-muted mt-sm" style={{ fontSize: '10px' }}>
+                    <strong>Friction:</strong> Rubber=0.9, Plastic=0.4, Ice=0.05<br />
+                    <strong>Restitution:</strong> Rubber=0.8, Metal=0.3, Wood=0.1
+                </div>
+            </div>
+
             {/* Geometry info */}
             <div className="form-group mt-lg">
                 <label className="form-label">Geometry Info</label>

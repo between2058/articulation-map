@@ -16,7 +16,7 @@ These schemas are compatible with NVIDIA Isaac Sim and PhysX.
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from pxr import Usd, UsdGeom, UsdPhysics, Gf, Sdf
+from pxr import Usd, UsdGeom, UsdPhysics, UsdShade, Gf, Sdf
 
 from app.models.schemas import Part, Joint, ArticulationData
 
@@ -179,6 +179,53 @@ class PhysicsInjector:
         
         logger.info(f"Collision disabled between {child_path} and {parent_path}")
     
+    def apply_physics_material(
+        self,
+        stage: Usd.Stage,
+        prim_path: str,
+        static_friction: float = 0.5,
+        dynamic_friction: float = 0.5,
+        restitution: float = 0.0
+    ) -> None:
+        """
+        Create and bind a physics material to a prim.
+        
+        Args:
+            stage: USD stage
+            prim_path: Path to the prim (usually collision mesh)
+            static_friction: 0.0 - 1.0+
+            dynamic_friction: 0.0 - 1.0+
+            restitution: 0.0 - 1.0
+        """
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            return
+            
+        # Define a Materials scope to keep things organized
+        materials_path = "/World/Materials"
+        if not stage.GetPrimAtPath(materials_path).IsValid():
+            UsdGeom.Scope.Define(stage, materials_path)
+            
+        # Create a unique material name based on properties
+        mat_name = f"Mat_F{int(static_friction*100)}_R{int(restitution*100)}"
+        mat_path = f"{materials_path}/{mat_name}"
+        
+        # Create Material if it doesn't exist
+        material_prim = stage.GetPrimAtPath(mat_path)
+        if not material_prim.IsValid():
+            material = UsdShade.Material.Define(stage, mat_path)
+            
+            # Add PhysicsMaterialAPI
+            physics_mat = UsdPhysics.MaterialAPI.Apply(material.GetPrim())
+            physics_mat.CreateStaticFrictionAttr(static_friction)
+            physics_mat.CreateDynamicFrictionAttr(dynamic_friction)
+            physics_mat.CreateRestitutionAttr(restitution)
+        else:
+            material = UsdShade.Material(material_prim)
+            
+        # Bind material to the prim
+        UsdShade.MaterialBindingAPI(prim).Bind(material)
+        
     def _calculate_parent_local_pos(
         self,
         stage: Usd.Stage,
@@ -498,6 +545,15 @@ class PhysicsInjector:
             mesh_path = f"{prim_path}/mesh"
             if stage.GetPrimAtPath(mesh_path).IsValid():
                 self.apply_collision(stage, mesh_path, collision_type=part.collision_type)
+                
+                # Apply physics material (friction/restitution) to the collision mesh
+                self.apply_physics_material(
+                    stage=stage,
+                    prim_path=mesh_path,
+                    static_friction=part.static_friction,
+                    dynamic_friction=part.dynamic_friction,
+                    restitution=part.restitution
+                )
         
         # Create joints
         for joint in articulation_data.joints:

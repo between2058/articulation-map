@@ -75,6 +75,11 @@ class Part(BaseModel):
         default="convexHull",
         description="Collision approximation type"
     )
+    
+    # Physics Material
+    static_friction: float = Field(default=0.5, description="Static friction coefficient")
+    dynamic_friction: float = Field(default=0.5, description="Dynamic friction coefficient")
+    restitution: float = Field(default=0.0, description="Restitution (bounciness) coefficient")
 
 
 class Joint(BaseModel):
