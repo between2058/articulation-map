@@ -153,6 +153,41 @@ class PhysicsInjector:
         
         logger.info(f"Applied CollisionAPI to {prim_path} (type={collision_type})")
     
+    def _calculate_parent_local_pos(
+        self,
+        stage: Usd.Stage,
+        parent_path: str,
+        child_path: str,
+        child_anchor: Tuple[float, float, float]
+    ) -> Gf.Vec3f:
+        """
+        Calculate the local position in parent frame that matches 
+        the child anchor point in world space.
+        """
+        parent_prim = stage.GetPrimAtPath(parent_path)
+        child_prim = stage.GetPrimAtPath(child_path)
+        
+        if not parent_prim.IsValid() or not child_prim.IsValid():
+            return Gf.Vec3f(0, 0, 0)
+            
+        # Get World Transforms
+        parent_xform = UsdGeom.Xformable(parent_prim)
+        child_xform = UsdGeom.Xformable(child_prim)
+        
+        time = Usd.TimeCode.Default()
+        parent_msg = parent_xform.ComputeLocalToWorldTransform(time)
+        child_msg = child_xform.ComputeLocalToWorldTransform(time)
+        
+        # Calculate Joint World Position (Child World * Anchor)
+        anchor_vec = Gf.Vec3d(child_anchor[0], child_anchor[1], child_anchor[2])
+        joint_world_pos = child_msg.Transform(anchor_vec)
+        
+        # Calculate Parent Local Position (Inv(Parent World) * Joint World)
+        parent_inv = parent_msg.GetInverse()
+        parent_local_pos = parent_inv.Transform(joint_world_pos)
+        
+        return Gf.Vec3f(parent_local_pos)
+
     def create_revolute_joint(
         self,
         stage: Usd.Stage,
@@ -160,6 +195,7 @@ class PhysicsInjector:
         parent_path: str,
         child_path: str,
         axis: Tuple[float, float, float] = (0, 0, 1),
+        anchor: Tuple[float, float, float] = (0, 0, 0),
         lower_limit: Optional[float] = None,
         upper_limit: Optional[float] = None,
         drive_stiffness: Optional[float] = None,
@@ -177,6 +213,7 @@ class PhysicsInjector:
             parent_path: Path to parent body prim
             child_path: Path to child body prim
             axis: Rotation axis [x, y, z] (normalized)
+            anchor: Pivot point relative to child frame [x, y, z]
             lower_limit: Lower rotation limit in degrees
             upper_limit: Upper rotation limit in degrees
             drive_stiffness: Position drive stiffness (spring constant)
@@ -215,10 +252,16 @@ class PhysicsInjector:
         if upper_limit is not None:
             joint.CreateUpperLimitAttr(float(upper_limit))
         
-        # Set default local poses (joint frames relative to each body)
-        # For simplified MVP, joint frame is at child origin
-        joint.CreateLocalPos0Attr(Gf.Vec3f(0, 0, 0))
-        joint.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+        # Calculate and set local poses
+        # pos1 is the anchor relative to child (user provided)
+        # pos0 must be calculated to match pos1 in world space
+        parent_local_pos = self._calculate_parent_local_pos(
+            stage, parent_path, child_path, anchor
+        )
+        
+        joint.CreateLocalPos0Attr(parent_local_pos)
+        joint.CreateLocalPos1Attr(Gf.Vec3f(anchor[0], anchor[1], anchor[2]))
+        
         joint.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
         joint.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
         
@@ -244,6 +287,7 @@ class PhysicsInjector:
         parent_path: str,
         child_path: str,
         axis: Tuple[float, float, float] = (0, 0, 1),
+        anchor: Tuple[float, float, float] = (0, 0, 0),
         lower_limit: Optional[float] = None,
         upper_limit: Optional[float] = None,
         drive_stiffness: Optional[float] = None,
@@ -261,6 +305,7 @@ class PhysicsInjector:
             parent_path: Path to parent body prim
             child_path: Path to child body prim
             axis: Translation axis [x, y, z] (normalized)
+            anchor: Pivot point relative to child frame [x, y, z]
             lower_limit: Lower translation limit in stage units (meters)
             upper_limit: Upper translation limit in stage units (meters)
             drive_stiffness: Position drive stiffness
@@ -298,9 +343,14 @@ class PhysicsInjector:
         if upper_limit is not None:
             joint.CreateUpperLimitAttr(float(upper_limit))
         
-        # Set default local poses
-        joint.CreateLocalPos0Attr(Gf.Vec3f(0, 0, 0))
-        joint.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+        # Calculate and set local poses
+        parent_local_pos = self._calculate_parent_local_pos(
+            stage, parent_path, child_path, anchor
+        )
+        
+        joint.CreateLocalPos0Attr(parent_local_pos)
+        joint.CreateLocalPos1Attr(Gf.Vec3f(anchor[0], anchor[1], anchor[2]))
+        
         joint.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
         joint.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
         
@@ -439,6 +489,7 @@ class PhysicsInjector:
                     parent_path=parent_path,
                     child_path=child_path,
                     axis=joint.axis,
+                    anchor=joint.anchor,
                     lower_limit=joint.lower_limit,
                     upper_limit=joint.upper_limit,
                     drive_stiffness=joint.drive_stiffness,
@@ -453,6 +504,7 @@ class PhysicsInjector:
                     parent_path=parent_path,
                     child_path=child_path,
                     axis=joint.axis,
+                    anchor=joint.anchor,
                     lower_limit=joint.lower_limit,
                     upper_limit=joint.upper_limit,
                     drive_stiffness=joint.drive_stiffness,

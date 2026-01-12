@@ -91,10 +91,66 @@ function BackgroundClickHandler({ onDeselect }) {
     );
 }
 
+
+/**
+ * Visualizes a joint pivot and axis attached to a mesh
+ */
+function JointVisualizer({ joint, childMesh, isSelected, isHovered }) {
+    useEffect(() => {
+        if (!childMesh) return;
+
+        const group = new THREE.Group();
+        childMesh.add(group);
+
+        // Position at anchor
+        const anchorPos = new THREE.Vector3(...(joint.anchor || [0, 0, 0]));
+        group.position.copy(anchorPos);
+
+        // 1. Pivot Marker (Sphere)
+        const radius = isSelected ? 0.04 : 0.02; // Small sphere
+        const color = isSelected ? 0xffcc00 : 0xffffff;
+
+        const sphereGeo = new THREE.SphereGeometry(radius, 16, 16);
+        const sphereMat = new THREE.MeshBasicMaterial({
+            color,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.8
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.renderOrder = 999; // Always on top
+        group.add(sphere);
+
+        // 2. Axis Arrow
+        // Axis is in Child Frame? Yes, assuming joint.axis is in child frame for simplicity/visuals,
+        // although physics joint axis is technically usually defined in joint frame.
+        // For this editor, we assume Axis is local to the part for now.
+        const axisVec = new THREE.Vector3(...(joint.axis || [0, 0, 1])).normalize();
+        const arrowLength = 0.2; // 20cm
+        const arrowColor = 0xff0000;
+
+        const arrowHelper = new THREE.ArrowHelper(axisVec, new THREE.Vector3(0, 0, 0), arrowLength, arrowColor);
+        arrowHelper.line.material.depthTest = false;
+        arrowHelper.cone.material.depthTest = false;
+        arrowHelper.renderOrder = 999;
+        group.add(arrowHelper);
+
+        return () => {
+            childMesh.remove(group);
+            sphereGeo.dispose();
+            sphereMat.dispose();
+            // ArrowHelper cleanup handled by itself mostly, but geometries stay if not disposed.
+            // standard three.js dispose necessary? usually yes.
+        };
+    }, [childMesh, joint, isSelected]);
+
+    return null;
+}
+
 /**
  * Model loader and renderer
  */
-function Model({ url, selectedPartId, onSelectPart, onPartsLoaded }) {
+function Model({ url, selectedPartId, onSelectPart, onPartsLoaded, joints, selectedJointIndex }) {
     const { scene } = useGLTF(url);
     const groupRef = useRef();
 
@@ -118,11 +174,10 @@ function Model({ url, selectedPartId, onSelectPart, onPartsLoaded }) {
 
                 // Ensure material has necessary properties for highlighting
                 if (child.material) {
-                    child.material = child.material.clone();
-                    if (!child.material.emissive) {
-                        child.material.emissive = new THREE.Color(0x000000);
+                    if (!child.material.userData.originalEmissive) {
+                        child.material.userData.originalEmissive = child.material.emissive.clone();
                     }
-                    child.material.emissiveIntensity = 0;
+                    child.material = child.material.clone();
                 }
 
                 parts.push({
@@ -155,6 +210,21 @@ function Model({ url, selectedPartId, onSelectPart, onPartsLoaded }) {
                         onSelect={onSelectPart}
                     />
                 ))}
+
+                {/* Visualizers for Joints */}
+                {joints && joints.map((joint, index) => {
+                    const childPart = meshParts.find(p => p.id === joint.child);
+                    if (!childPart) return null;
+
+                    return (
+                        <JointVisualizer
+                            key={index}
+                            joint={joint}
+                            childMesh={childPart.mesh}
+                            isSelected={selectedJointIndex === index}
+                        />
+                    );
+                })}
             </Center>
         </group>
     );
@@ -179,13 +249,15 @@ export function SceneViewer({
     modelUrl,
     selectedPartId,
     onSelectPart,
-    onPartsLoaded,
-    onDeselect
+    onDeselect,
+    joints,
+    selectedJointIndex
 }) {
     return (
-        <div className="viewer-container">
+        <div className="viewer-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
             {modelUrl ? (
                 <Canvas
+                    shadows
                     camera={{ position: [3, 3, 3], fov: 50 }}
                     gl={{ antialias: true, alpha: true }}
                     style={{ background: 'linear-gradient(180deg, #0a0a0f 0%, #12121a 100%)' }}
@@ -205,7 +277,8 @@ export function SceneViewer({
                             url={modelUrl}
                             selectedPartId={selectedPartId}
                             onSelectPart={onSelectPart}
-                            onPartsLoaded={onPartsLoaded}
+                            joints={joints}
+                            selectedJointIndex={selectedJointIndex}
                         />
                     </Suspense>
 
@@ -213,23 +286,42 @@ export function SceneViewer({
                     <OrbitControls
                         enableDamping
                         dampingFactor={0.05}
-                        minDistance={1}
+                        minDistance={0.1}
                         maxDistance={50}
+                        makeDefault
                     />
 
                     {/* Grid helper */}
                     <gridHelper args={[10, 10, '#333', '#222']} />
                 </Canvas>
             ) : (
-                <div className="viewer-empty">
-                    <div className="viewer-empty-icon">🎨</div>
+                <div className="viewer-empty" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: 'var(--text-secondary)'
+                }}>
+                    <div className="viewer-empty-icon" style={{ fontSize: '48px', marginBottom: '1rem' }}>📦</div>
                     <p>Upload a GLB model to start</p>
                 </div>
             )}
 
             {modelUrl && (
-                <div className="viewer-overlay">
-                    Click on a part to select • ESC to deselect • Drag to rotate • Scroll to zoom
+                <div className="viewer-overlay" style={{
+                    position: 'absolute',
+                    bottom: '20px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(0,0,0,0.5)',
+                    padding: '8px 16px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    color: 'rgba(255,255,255,0.8)',
+                    pointerEvents: 'none'
+                }}>
+                    Click Part: Select • Drag: Rotate • Scroll: Zoom • Joint Anchors are shown for selected joints
                 </div>
             )}
         </div>

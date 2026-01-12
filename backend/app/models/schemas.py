@@ -114,6 +114,10 @@ class Joint(BaseModel):
         default=(0, 0, 1),
         description="Joint axis direction [x, y, z]"
     )
+    anchor: Tuple[float, float, float] = Field(
+        default=(0.0, 0.0, 0.0),
+        description="Joint pivot point relative to child part [x, y, z]"
+    )
     
     # Joint limits
     lower_limit: Optional[float] = Field(

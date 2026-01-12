@@ -170,6 +170,8 @@ function App() {
                     selectedPartId={selectedPartId}
                     onSelectPart={selectPart}
                     onDeselect={handleDeselect}
+                    joints={joints}
+                    selectedJointIndex={selectedJointIndex}
                 />
 
                 {/* Right Panel - Editor */}

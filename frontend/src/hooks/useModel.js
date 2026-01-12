@@ -37,6 +37,7 @@ const createDefaultJoint = (name, parent, child) => ({
     child,
     type: 'revolute',
     axis: [0, 0, 1],
+    anchor: [0, 0, 0], // x, y, z relative to child (optional)
     // Joint limits (degrees for revolute, meters for prismatic)
     lowerLimit: -180,
     upperLimit: 180,
@@ -212,6 +213,7 @@ export function useModel() {
                 child: joint.child,
                 type: joint.type,
                 axis: joint.axis,
+                anchor: joint.anchor,
                 lower_limit: joint.lowerLimit,
                 upper_limit: joint.upperLimit,
                 drive_stiffness: joint.driveStiffness,

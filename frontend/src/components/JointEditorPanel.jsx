@@ -204,6 +204,32 @@ export function JointEditorPanel({
                                 </select>
                             </div>
 
+                            {/* Joint Anchor (Pivot) */}
+                            <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
+                                <label className="form-label" style={{ fontSize: '11px' }}>
+                                    📍 Anchor (Pivot) [Child Frame]
+                                </label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                    {['x', 'y', 'z'].map((axis, i) => (
+                                        <div key={axis}>
+                                            <label className="text-muted" style={{ fontSize: '10px' }}>{axis.toUpperCase()}</label>
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                style={{ padding: '4px' }}
+                                                step="0.01"
+                                                value={selectedJoint.anchor ? selectedJoint.anchor[i] : 0}
+                                                onChange={(e) => {
+                                                    const newAnchor = [...(selectedJoint.anchor || [0, 0, 0])];
+                                                    newAnchor[i] = parseFloat(e.target.value) || 0;
+                                                    handleUpdateSelected('anchor', newAnchor);
+                                                }}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Joint Limits Section */}
                             <div style={{
                                 marginTop: 'var(--space-md)',
