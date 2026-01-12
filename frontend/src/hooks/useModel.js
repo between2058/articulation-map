@@ -46,6 +46,7 @@ const createDefaultJoint = (name, parent, child) => ({
     driveDamping: 100,
     driveMaxForce: 1000,
     driveType: 'position',
+    disableCollision: true, // Disable collision between parent and child by default
 });
 
 export function useModel() {
@@ -220,6 +221,7 @@ export function useModel() {
                 drive_damping: joint.driveDamping,
                 drive_max_force: joint.driveMaxForce,
                 drive_type: joint.driveType,
+                disable_collision: joint.disableCollision !== false, // Default to true if undefined
             }));
 
             const requestBody = {

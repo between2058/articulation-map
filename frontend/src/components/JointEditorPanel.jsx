@@ -230,6 +230,28 @@ export function JointEditorPanel({
                                 </div>
                             </div>
 
+                            {/* Collision Filtering */}
+                            <div className="form-group" style={{
+                                marginTop: 'var(--space-md)',
+                                padding: '8px',
+                                background: 'rgba(255, 100, 100, 0.1)',
+                                borderRadius: '4px'
+                            }}>
+                                <label className="flex items-center gap-sm cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedJoint.disableCollision !== false}
+                                        onChange={(e) => handleUpdateSelected('disableCollision', e.target.checked)}
+                                    />
+                                    <span style={{ fontSize: '11px' }}>
+                                        ⚠️ Disable Collision with Parent
+                                    </span>
+                                </label>
+                                <div className="text-muted" style={{ fontSize: '10px', marginTop: '4px', marginLeft: '20px' }}>
+                                    Prevents "explosion" when parts overlap. Keep enabled for connected parts.
+                                </div>
+                            </div>
+
                             {/* Joint Limits Section */}
                             <div style={{
                                 marginTop: 'var(--space-md)',

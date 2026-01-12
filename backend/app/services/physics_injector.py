@@ -153,6 +153,32 @@ class PhysicsInjector:
         
         logger.info(f"Applied CollisionAPI to {prim_path} (type={collision_type})")
     
+    def apply_collision_filtering(
+        self,
+        stage: Usd.Stage,
+        child_path: str,
+        parent_path: str
+    ) -> None:
+        """
+        Apply FilteredPairsAPI to disable collision between two bodies.
+        
+        Args:
+            stage: USD stage
+            child_path: Path to child body
+            parent_path: Path to parent body
+        """
+        child_prim = stage.GetPrimAtPath(child_path)
+        if not child_prim.IsValid():
+            return
+            
+        # Apply FilteredPairsAPI to the child prim
+        filtered_api = UsdPhysics.FilteredPairsAPI.Apply(child_prim)
+        
+        # Add parent to the filtered pairs relationship
+        filtered_api.GetFilteredPairsRel().AddTarget(Sdf.Path(parent_path))
+        
+        logger.info(f"Collision disabled between {child_path} and {parent_path}")
+    
     def _calculate_parent_local_pos(
         self,
         stage: Usd.Stage,
@@ -512,13 +538,16 @@ class PhysicsInjector:
                     drive_max_force=joint.drive_max_force,
                     drive_type=joint.drive_type
                 )
-            elif joint.type == "fixed":
                 self.create_fixed_joint(
                     stage=stage,
                     joint_name=joint.name,
                     parent_path=parent_path,
                     child_path=child_path
                 )
+            
+            # Apply collision filtering if requested (default=True)
+            if joint.disable_collision:
+                self.apply_collision_filtering(stage, child_path, parent_path)
         
         logger.info(f"Injected physics for {len(articulation_data.parts)} parts and {len(articulation_data.joints)} joints")
     

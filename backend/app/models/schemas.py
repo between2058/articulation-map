@@ -144,7 +144,13 @@ class Joint(BaseModel):
     )
     drive_type: Literal["position", "velocity", "none"] = Field(
         default="position",
-        description="Drive control type"
+        description="Type of joint drive"
+    )
+    
+    # Collision filtering
+    disable_collision: bool = Field(
+        default=True,
+        description="Disable collision between parent and child bodies"
     )
 
 
