@@ -86,15 +86,30 @@ def validate_physics_usd(usd_path: str) -> dict:
     # =========================================
     rigid_bodies = []
     kinematic_bodies = []
+    bodies_with_mass = 0
+    bodies_with_density = 0
+    
     for prim in stage.Traverse():
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
             rigid_bodies.append(prim)
             rb = UsdPhysics.RigidBodyAPI(prim)
             if rb.GetKinematicEnabledAttr().Get():
                 kinematic_bodies.append(prim)
+            
+            # Check for MassAPI
+            if prim.HasAPI(UsdPhysics.MassAPI):
+                mass_api = UsdPhysics.MassAPI(prim)
+                mass = mass_api.GetMassAttr().Get()
+                density = mass_api.GetDensityAttr().Get()
+                if mass is not None:
+                    bodies_with_mass += 1
+                if density is not None:
+                    bodies_with_density += 1
     
     results["info"]["rigid_body_count"] = len(rigid_bodies)
     results["info"]["kinematic_body_count"] = len(kinematic_bodies)
+    results["info"]["bodies_with_explicit_mass"] = bodies_with_mass
+    results["info"]["bodies_with_density"] = bodies_with_density
     
     if len(rigid_bodies) == 0:
         results["errors"].append("No RigidBodyAPI found - nothing will simulate")
@@ -284,7 +299,13 @@ def print_report(results: dict):
     print(f"   Rigid Bodies: {info.get('rigid_body_count', 0)}")
     print(f"   Kinematic Bodies: {info.get('kinematic_body_count', 0)}")
     print(f"   Colliders: {info.get('collider_count', 0)}")
-    print(f"   Joints: {info.get('joint_count', 0)}")
+    
+    print("\n⚖️  MASS:")
+    print(f"   Explicit Mass: {info.get('bodies_with_explicit_mass', 0)} bodies")
+    print(f"   Density-Based: {info.get('bodies_with_density', 0)} bodies")
+    
+    print("\n🔗 JOINTS:")
+    print(f"   Total: {info.get('joint_count', 0)}")
     print(f"     - Revolute: {info.get('revolute_joints', 0)}")
     print(f"     - Prismatic: {info.get('prismatic_joints', 0)}")
     print(f"     - Fixed: {info.get('fixed_joints', 0)}")

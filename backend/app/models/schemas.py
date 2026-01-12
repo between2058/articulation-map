@@ -35,6 +35,11 @@ class Part(BaseModel):
             - fixed: Cannot move relative to parent
             - revolute: Rotates around an axis
             - prismatic: Slides along an axis
+        
+        # Mass properties
+        mass: Mass in kilograms (None = auto-compute from density)
+        density: Density in kg/m³ for auto mass computation
+        center_of_mass: Center of mass offset [x, y, z] (None = auto-compute)
     """
     id: str = Field(..., description="Unique part identifier from mesh name")
     name: str = Field(..., description="Display name for the part")
@@ -49,6 +54,20 @@ class Part(BaseModel):
     mobility: Literal["fixed", "revolute", "prismatic"] = Field(
         default="fixed",
         description="Movement capability of the part"
+    )
+    
+    # Mass properties
+    mass: Optional[float] = Field(
+        default=None,
+        description="Mass in kg (None = auto-compute from density)"
+    )
+    density: Optional[float] = Field(
+        default=1000.0,
+        description="Density in kg/m³ for mass computation"
+    )
+    center_of_mass: Optional[Tuple[float, float, float]] = Field(
+        default=None,
+        description="Center of mass offset [x, y, z] relative to part origin"
     )
 
 

@@ -23,6 +23,10 @@ const createDefaultPart = (parsed) => ({
     faceCount: parsed.face_count || 0,
     boundsMin: parsed.bounds_min || [0, 0, 0],
     boundsMax: parsed.bounds_max || [0, 0, 0],
+    // Mass properties
+    mass: null,  // null = auto-compute from density
+    density: 1000,  // kg/m³ (water density as default)
+    centerOfMass: null,  // null = auto-compute
 });
 
 // Default joint structure
@@ -194,6 +198,9 @@ export function useModel() {
                 type: part.type,
                 role: part.role,
                 mobility: part.mobility,
+                mass: part.mass,
+                density: part.density,
+                center_of_mass: part.centerOfMass,
             }));
 
             // Convert joints to API format

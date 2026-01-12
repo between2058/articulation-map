@@ -69,7 +69,9 @@ class PhysicsInjector:
         stage: Usd.Stage,
         prim_path: str,
         is_kinematic: bool = False,
-        density: Optional[float] = None
+        mass: Optional[float] = None,
+        density: Optional[float] = None,
+        center_of_mass: Optional[Tuple[float, float, float]] = None
     ) -> None:
         """
         Apply RigidBodyAPI to make a prim a dynamic rigid body.
@@ -78,7 +80,9 @@ class PhysicsInjector:
             stage: USD stage
             prim_path: Path to the prim
             is_kinematic: If True, body is kinematic (animated, not simulated)
-            density: Body density in kg/m³ (uses default if None)
+            mass: Explicit mass in kg (overrides density if provided)
+            density: Body density in kg/m³ (used if mass not provided)
+            center_of_mass: Center of mass offset [x, y, z]
         """
         prim = stage.GetPrimAtPath(prim_path)
         if not prim.IsValid():
@@ -90,9 +94,23 @@ class PhysicsInjector:
         if is_kinematic:
             rigid_body.CreateKinematicEnabledAttr(True)
         
-        # Apply MassAPI for density-based mass computation
+        # Apply MassAPI for mass properties
         mass_api = UsdPhysics.MassAPI.Apply(prim)
-        mass_api.CreateDensityAttr(density or self.default_density)
+        
+        if mass is not None:
+            # Use explicit mass value
+            mass_api.CreateMassAttr(float(mass))
+            logger.info(f"Applied mass={mass}kg to {prim_path}")
+        else:
+            # Use density for auto mass computation
+            mass_api.CreateDensityAttr(float(density or self.default_density))
+        
+        # Set center of mass if provided
+        if center_of_mass is not None:
+            mass_api.CreateCenterOfMassAttr(
+                Gf.Vec3f(float(center_of_mass[0]), float(center_of_mass[1]), float(center_of_mass[2]))
+            )
+            logger.info(f"Set center of mass to {center_of_mass} for {prim_path}")
         
         logger.info(f"Applied RigidBodyAPI to {prim_path} (kinematic={is_kinematic})")
     
@@ -390,8 +408,15 @@ class PhysicsInjector:
             # Base parts are kinematic (fixed in world)
             is_kinematic = (part.type == "base")
             
-            # Apply rigid body
-            self.apply_rigid_body(stage, prim_path, is_kinematic=is_kinematic)
+            # Apply rigid body with mass properties
+            self.apply_rigid_body(
+                stage, 
+                prim_path, 
+                is_kinematic=is_kinematic,
+                mass=part.mass,
+                density=part.density,
+                center_of_mass=part.center_of_mass
+            )
             
             # Apply collision to the mesh child
             mesh_path = f"{prim_path}/mesh"

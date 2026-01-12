@@ -112,6 +112,73 @@ export function TagEditorPanel({
                 </div>
             </div>
 
+            {/* Mass Properties Section */}
+            <div style={{
+                marginTop: 'var(--space-lg)',
+                paddingTop: 'var(--space-md)',
+                borderTop: '1px solid var(--border-color)'
+            }}>
+                <label className="form-label" style={{ color: 'var(--accent-primary)' }}>
+                    ⚖️ Mass Properties
+                </label>
+
+                <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '11px' }}>
+                        Mass Mode
+                    </label>
+                    <select
+                        className="form-select"
+                        value={selectedPart.mass !== null ? 'manual' : 'auto'}
+                        onChange={(e) => {
+                            if (e.target.value === 'auto') {
+                                handleChange('mass', null);
+                            } else {
+                                handleChange('mass', 1.0);
+                            }
+                        }}
+                    >
+                        <option value="auto">Auto (from density)</option>
+                        <option value="manual">Manual (specify kg)</option>
+                    </select>
+                </div>
+
+                {selectedPart.mass !== null ? (
+                    <div className="form-group">
+                        <label className="form-label" style={{ fontSize: '11px' }}>
+                            Mass (kg)
+                        </label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={selectedPart.mass ?? 1.0}
+                            min="0.001"
+                            step="0.1"
+                            onChange={(e) => handleChange('mass', parseFloat(e.target.value) || 0.001)}
+                        />
+                        <div className="text-muted mt-sm" style={{ fontSize: '10px' }}>
+                            Common values: 0.1kg (small part), 1kg (medium), 10kg (heavy)
+                        </div>
+                    </div>
+                ) : (
+                    <div className="form-group">
+                        <label className="form-label" style={{ fontSize: '11px' }}>
+                            Density (kg/m³)
+                        </label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={selectedPart.density ?? 1000}
+                            min="1"
+                            step="100"
+                            onChange={(e) => handleChange('density', parseFloat(e.target.value) || 1000)}
+                        />
+                        <div className="text-muted mt-sm" style={{ fontSize: '10px' }}>
+                            Reference: Water=1000, Plastic=1200, Aluminum=2700, Steel=7800
+                        </div>
+                    </div>
+                )}
+            </div>
+
             {/* Geometry info */}
             <div className="form-group mt-lg">
                 <label className="form-label">Geometry Info</label>
