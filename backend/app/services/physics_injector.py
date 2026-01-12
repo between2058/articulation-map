@@ -1,0 +1,549 @@
+"""
+Physics Schema Injector
+
+Injects NVIDIA USD physics schemas into USD stages for simulation.
+
+Adds:
+- UsdPhysics.ArticulationRootAPI - Marks root of articulated assembly
+- UsdPhysics.RigidBodyAPI - Makes parts simulate as rigid bodies
+- UsdPhysics.CollisionAPI - Enables collision detection
+- UsdPhysics.MassAPI - Mass properties
+- Joint prims (RevoluteJoint, PrismaticJoint, FixedJoint)
+
+These schemas are compatible with NVIDIA Isaac Sim and PhysX.
+"""
+
+import logging
+from typing import Dict, List, Optional, Tuple
+
+from pxr import Usd, UsdGeom, UsdPhysics, Gf, Sdf
+
+from app.models.schemas import Part, Joint, ArticulationData
+
+logger = logging.getLogger(__name__)
+
+
+class PhysicsInjector:
+    """
+    Injects physics schemas into USD stages.
+    
+    Takes a USD stage with mesh geometry and adds the necessary
+    physics APIs and joint prims for articulated simulation.
+    """
+    
+    def __init__(self, default_density: float = 1000.0):
+        """
+        Initialize the physics injector.
+        
+        Args:
+            default_density: Default density for rigid bodies in kg/m³
+        """
+        self.default_density = default_density
+    
+    def apply_articulation_root(
+        self, 
+        stage: Usd.Stage, 
+        prim_path: str
+    ) -> None:
+        """
+        Apply ArticulationRootAPI to a prim.
+        
+        This marks the prim as the root of an articulated assembly,
+        which enables reduced-coordinate simulation in PhysX.
+        
+        Args:
+            stage: USD stage
+            prim_path: Path to the prim to mark as articulation root
+        """
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        
+        # Apply ArticulationRootAPI
+        UsdPhysics.ArticulationRootAPI.Apply(prim)
+        
+        logger.info(f"Applied ArticulationRootAPI to {prim_path}")
+    
+    def apply_rigid_body(
+        self,
+        stage: Usd.Stage,
+        prim_path: str,
+        is_kinematic: bool = False,
+        density: Optional[float] = None
+    ) -> None:
+        """
+        Apply RigidBodyAPI to make a prim a dynamic rigid body.
+        
+        Args:
+            stage: USD stage
+            prim_path: Path to the prim
+            is_kinematic: If True, body is kinematic (animated, not simulated)
+            density: Body density in kg/m³ (uses default if None)
+        """
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        
+        # Apply RigidBodyAPI
+        rigid_body = UsdPhysics.RigidBodyAPI.Apply(prim)
+        
+        if is_kinematic:
+            rigid_body.CreateKinematicEnabledAttr(True)
+        
+        # Apply MassAPI for density-based mass computation
+        mass_api = UsdPhysics.MassAPI.Apply(prim)
+        mass_api.CreateDensityAttr(density or self.default_density)
+        
+        logger.info(f"Applied RigidBodyAPI to {prim_path} (kinematic={is_kinematic})")
+    
+    def apply_collision(
+        self,
+        stage: Usd.Stage,
+        prim_path: str,
+        collision_type: str = "mesh"
+    ) -> None:
+        """
+        Apply CollisionAPI to enable collision detection.
+        
+        For mesh collision, also applies MeshCollisionAPI.
+        
+        Args:
+            stage: USD stage
+            prim_path: Path to the mesh prim
+            collision_type: Type of collision shape ("mesh", "convexHull", etc.)
+        """
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        
+        # Apply CollisionAPI
+        collision = UsdPhysics.CollisionAPI.Apply(prim)
+        
+        # For mesh prims, we need to specify the collision approximation
+        # Check if this is a Mesh prim
+        if prim.IsA(UsdGeom.Mesh):
+            mesh_collision = UsdPhysics.MeshCollisionAPI.Apply(prim)
+            
+            # Set approximation type
+            if collision_type == "convexHull":
+                mesh_collision.CreateApproximationAttr("convexHull")
+            elif collision_type == "convexDecomposition":
+                mesh_collision.CreateApproximationAttr("convexDecomposition")
+            else:
+                # Default to triangle mesh (most accurate but slower)
+                mesh_collision.CreateApproximationAttr("none")
+        
+        logger.info(f"Applied CollisionAPI to {prim_path} (type={collision_type})")
+    
+    def create_revolute_joint(
+        self,
+        stage: Usd.Stage,
+        joint_name: str,
+        parent_path: str,
+        child_path: str,
+        axis: Tuple[float, float, float] = (0, 0, 1),
+        lower_limit: Optional[float] = None,
+        upper_limit: Optional[float] = None,
+        drive_stiffness: Optional[float] = None,
+        drive_damping: Optional[float] = None,
+        drive_max_force: Optional[float] = None,
+        drive_type: str = "position",
+        joints_parent_path: Optional[str] = None
+    ) -> str:
+        """
+        Create a revolute (rotation) joint between two bodies.
+        
+        Args:
+            stage: USD stage
+            joint_name: Name for the joint prim
+            parent_path: Path to parent body prim
+            child_path: Path to child body prim
+            axis: Rotation axis [x, y, z] (normalized)
+            lower_limit: Lower rotation limit in degrees
+            upper_limit: Upper rotation limit in degrees
+            drive_stiffness: Position drive stiffness (spring constant)
+            drive_damping: Velocity drive damping
+            drive_max_force: Maximum drive force
+            drive_type: "position", "velocity", or "none"
+            joints_parent_path: Path to create joint under (default: root/Joints)
+            
+        Returns:
+            Path to the created joint prim
+        """
+        # Determine where to create the joint
+        if joints_parent_path is None:
+            root_prim = stage.GetDefaultPrim()
+            joints_parent_path = str(root_prim.GetPath().AppendChild("Joints"))
+            
+            # Create Joints xform if it doesn't exist
+            if not stage.GetPrimAtPath(joints_parent_path).IsValid():
+                UsdGeom.Xform.Define(stage, joints_parent_path)
+        
+        joint_path = f"{joints_parent_path}/{self._sanitize_name(joint_name)}"
+        
+        # Create the revolute joint
+        joint = UsdPhysics.RevoluteJoint.Define(stage, joint_path)
+        
+        # Set body relationships
+        joint.CreateBody0Rel().SetTargets([Sdf.Path(parent_path)])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path(child_path)])
+        
+        # Set joint axis
+        joint.CreateAxisAttr(self._axis_to_token(axis))
+        
+        # Set joint limits if provided
+        if lower_limit is not None:
+            joint.CreateLowerLimitAttr(float(lower_limit))
+        if upper_limit is not None:
+            joint.CreateUpperLimitAttr(float(upper_limit))
+        
+        # Set default local poses (joint frames relative to each body)
+        # For simplified MVP, joint frame is at child origin
+        joint.CreateLocalPos0Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
+        joint.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
+        
+        # Apply joint drive if parameters provided
+        if drive_type != "none" and drive_stiffness is not None:
+            self._apply_joint_drive(
+                stage=stage,
+                joint_prim=joint.GetPrim(),
+                drive_type=drive_type,
+                stiffness=drive_stiffness,
+                damping=drive_damping,
+                max_force=drive_max_force
+            )
+        
+        logger.info(f"Created RevoluteJoint: {joint_path} ({parent_path} -> {child_path})")
+        
+        return joint_path
+    
+    def create_prismatic_joint(
+        self,
+        stage: Usd.Stage,
+        joint_name: str,
+        parent_path: str,
+        child_path: str,
+        axis: Tuple[float, float, float] = (0, 0, 1),
+        lower_limit: Optional[float] = None,
+        upper_limit: Optional[float] = None,
+        drive_stiffness: Optional[float] = None,
+        drive_damping: Optional[float] = None,
+        drive_max_force: Optional[float] = None,
+        drive_type: str = "position",
+        joints_parent_path: Optional[str] = None
+    ) -> str:
+        """
+        Create a prismatic (sliding) joint between two bodies.
+        
+        Args:
+            stage: USD stage
+            joint_name: Name for the joint prim
+            parent_path: Path to parent body prim
+            child_path: Path to child body prim
+            axis: Translation axis [x, y, z] (normalized)
+            lower_limit: Lower translation limit in stage units (meters)
+            upper_limit: Upper translation limit in stage units (meters)
+            drive_stiffness: Position drive stiffness
+            drive_damping: Velocity drive damping
+            drive_max_force: Maximum drive force
+            drive_type: "position", "velocity", or "none"
+            joints_parent_path: Path to create joint under
+            
+        Returns:
+            Path to the created joint prim
+        """
+        # Determine where to create the joint
+        if joints_parent_path is None:
+            root_prim = stage.GetDefaultPrim()
+            joints_parent_path = str(root_prim.GetPath().AppendChild("Joints"))
+            
+            if not stage.GetPrimAtPath(joints_parent_path).IsValid():
+                UsdGeom.Xform.Define(stage, joints_parent_path)
+        
+        joint_path = f"{joints_parent_path}/{self._sanitize_name(joint_name)}"
+        
+        # Create the prismatic joint
+        joint = UsdPhysics.PrismaticJoint.Define(stage, joint_path)
+        
+        # Set body relationships
+        joint.CreateBody0Rel().SetTargets([Sdf.Path(parent_path)])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path(child_path)])
+        
+        # Set joint axis
+        joint.CreateAxisAttr(self._axis_to_token(axis))
+        
+        # Set joint limits if provided
+        if lower_limit is not None:
+            joint.CreateLowerLimitAttr(float(lower_limit))
+        if upper_limit is not None:
+            joint.CreateUpperLimitAttr(float(upper_limit))
+        
+        # Set default local poses
+        joint.CreateLocalPos0Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
+        joint.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
+        
+        # Apply joint drive if parameters provided
+        if drive_type != "none" and drive_stiffness is not None:
+            self._apply_joint_drive(
+                stage=stage,
+                joint_prim=joint.GetPrim(),
+                drive_type=drive_type,
+                stiffness=drive_stiffness,
+                damping=drive_damping,
+                max_force=drive_max_force,
+                is_angular=False  # Prismatic uses linear drive
+            )
+        
+        logger.info(f"Created PrismaticJoint: {joint_path} ({parent_path} -> {child_path})")
+        
+        return joint_path
+    
+    def create_fixed_joint(
+        self,
+        stage: Usd.Stage,
+        joint_name: str,
+        parent_path: str,
+        child_path: str,
+        joints_parent_path: Optional[str] = None
+    ) -> str:
+        """
+        Create a fixed (welded) joint between two bodies.
+        
+        Fixed joints lock all relative motion between bodies.
+        
+        Args:
+            stage: USD stage
+            joint_name: Name for the joint prim
+            parent_path: Path to parent body prim
+            child_path: Path to child body prim
+            joints_parent_path: Path to create joint under
+            
+        Returns:
+            Path to the created joint prim
+        """
+        if joints_parent_path is None:
+            root_prim = stage.GetDefaultPrim()
+            joints_parent_path = str(root_prim.GetPath().AppendChild("Joints"))
+            
+            if not stage.GetPrimAtPath(joints_parent_path).IsValid():
+                UsdGeom.Xform.Define(stage, joints_parent_path)
+        
+        joint_path = f"{joints_parent_path}/{self._sanitize_name(joint_name)}"
+        
+        # Create the fixed joint
+        joint = UsdPhysics.FixedJoint.Define(stage, joint_path)
+        
+        # Set body relationships
+        joint.CreateBody0Rel().SetTargets([Sdf.Path(parent_path)])
+        joint.CreateBody1Rel().SetTargets([Sdf.Path(child_path)])
+        
+        # Set default local poses
+        joint.CreateLocalPos0Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+        joint.CreateLocalRot0Attr(Gf.Quatf(1, 0, 0, 0))
+        joint.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
+        
+        logger.info(f"Created FixedJoint: {joint_path} ({parent_path} -> {child_path})")
+        
+        return joint_path
+    
+    def inject_physics(
+        self,
+        stage: Usd.Stage,
+        articulation_data: ArticulationData,
+        part_paths: Dict[str, str]
+    ) -> None:
+        """
+        Inject all physics schemas based on articulation data.
+        
+        This is the main entry point for adding physics to a stage.
+        
+        Args:
+            stage: USD stage with mesh geometry
+            articulation_data: Parts and joints data
+            part_paths: Mapping from part IDs to USD prim paths
+        """
+        # Find the root/base part
+        base_part = self._find_base_part(articulation_data.parts)
+        
+        if base_part and base_part.id in part_paths:
+            # Apply ArticulationRootAPI to base
+            self.apply_articulation_root(stage, part_paths[base_part.id])
+        else:
+            # Apply to first part if no base defined
+            if part_paths:
+                first_path = list(part_paths.values())[0]
+                self.apply_articulation_root(stage, first_path)
+        
+        # Apply RigidBodyAPI and CollisionAPI to all parts
+        for part in articulation_data.parts:
+            if part.id not in part_paths:
+                logger.warning(f"Part {part.id} not found in USD stage")
+                continue
+            
+            prim_path = part_paths[part.id]
+            
+            # Base parts are kinematic (fixed in world)
+            is_kinematic = (part.type == "base")
+            
+            # Apply rigid body
+            self.apply_rigid_body(stage, prim_path, is_kinematic=is_kinematic)
+            
+            # Apply collision to the mesh child
+            mesh_path = f"{prim_path}/mesh"
+            if stage.GetPrimAtPath(mesh_path).IsValid():
+                self.apply_collision(stage, mesh_path)
+        
+        # Create joints
+        for joint in articulation_data.joints:
+            if joint.parent not in part_paths or joint.child not in part_paths:
+                logger.warning(f"Joint {joint.name}: parent or child not found")
+                continue
+            
+            parent_path = part_paths[joint.parent]
+            child_path = part_paths[joint.child]
+            
+            if joint.type == "revolute":
+                self.create_revolute_joint(
+                    stage=stage,
+                    joint_name=joint.name,
+                    parent_path=parent_path,
+                    child_path=child_path,
+                    axis=joint.axis,
+                    lower_limit=joint.lower_limit,
+                    upper_limit=joint.upper_limit,
+                    drive_stiffness=joint.drive_stiffness,
+                    drive_damping=joint.drive_damping,
+                    drive_max_force=joint.drive_max_force,
+                    drive_type=joint.drive_type
+                )
+            elif joint.type == "prismatic":
+                self.create_prismatic_joint(
+                    stage=stage,
+                    joint_name=joint.name,
+                    parent_path=parent_path,
+                    child_path=child_path,
+                    axis=joint.axis,
+                    lower_limit=joint.lower_limit,
+                    upper_limit=joint.upper_limit,
+                    drive_stiffness=joint.drive_stiffness,
+                    drive_damping=joint.drive_damping,
+                    drive_max_force=joint.drive_max_force,
+                    drive_type=joint.drive_type
+                )
+            elif joint.type == "fixed":
+                self.create_fixed_joint(
+                    stage=stage,
+                    joint_name=joint.name,
+                    parent_path=parent_path,
+                    child_path=child_path
+                )
+        
+        logger.info(f"Injected physics for {len(articulation_data.parts)} parts and {len(articulation_data.joints)} joints")
+    
+    def _find_base_part(self, parts: List[Part]) -> Optional[Part]:
+        """Find the part marked as 'base' type."""
+        for part in parts:
+            if part.type == "base":
+                return part
+        return None
+    
+    def _axis_to_token(self, axis: Tuple[float, float, float]) -> str:
+        """
+        Convert axis vector to USD axis token.
+        
+        USD joints use "X", "Y", or "Z" tokens for axis specification.
+        
+        Args:
+            axis: [x, y, z] direction vector
+            
+        Returns:
+            "X", "Y", or "Z" based on dominant axis
+        """
+        x, y, z = abs(axis[0]), abs(axis[1]), abs(axis[2])
+        
+        if x >= y and x >= z:
+            return "X"
+        elif y >= x and y >= z:
+            return "Y"
+        else:
+            return "Z"
+    
+    def _sanitize_name(self, name: str) -> str:
+        """Sanitize a name for use as a USD prim name."""
+        sanitized = ''.join(c if c.isalnum() or c == '_' else '_' for c in name)
+        if sanitized and sanitized[0].isdigit():
+            sanitized = '_' + sanitized
+        if not sanitized:
+            sanitized = '_unnamed'
+        while '__' in sanitized:
+            sanitized = sanitized.replace('__', '_')
+        return sanitized
+    
+    def _apply_joint_drive(
+        self,
+        stage: Usd.Stage,
+        joint_prim: Usd.Prim,
+        drive_type: str,
+        stiffness: Optional[float],
+        damping: Optional[float],
+        max_force: Optional[float],
+        is_angular: bool = True
+    ) -> None:
+        """
+        Apply drive API to a joint for motor control.
+        
+        UsdPhysics.DriveAPI allows setting PD control parameters
+        for joint actuation in simulation.
+        
+        Args:
+            stage: USD stage
+            joint_prim: The joint prim to add drive to
+            drive_type: "position" or "velocity"
+            stiffness: Position gain / spring constant
+            damping: Velocity gain / damping coefficient
+            max_force: Maximum force/torque the drive can apply
+            is_angular: True for revolute joints, False for prismatic
+        """
+        # Determine the drive name based on joint type
+        # For revolute joints, we use "angular" drive
+        # For prismatic joints, we use "linear" drive
+        drive_name = "angular" if is_angular else "linear"
+        
+        # Apply DriveAPI with the appropriate name
+        drive = UsdPhysics.DriveAPI.Apply(joint_prim, drive_name)
+        
+        # Set drive type
+        if drive_type == "position":
+            drive.CreateTypeAttr("force")  # Position control uses force mode
+        else:
+            drive.CreateTypeAttr("force")  # Velocity control also uses force mode
+        
+        # Set stiffness (position gain)
+        if stiffness is not None:
+            drive.CreateStiffnessAttr(float(stiffness))
+        
+        # Set damping (velocity gain)
+        if damping is not None:
+            drive.CreateDampingAttr(float(damping))
+        
+        # Set max force
+        if max_force is not None:
+            drive.CreateMaxForceAttr(float(max_force))
+        
+        # For position drive, set a target position of 0 (can be changed in simulation)
+        if drive_type == "position":
+            drive.CreateTargetPositionAttr(0.0)
+        elif drive_type == "velocity":
+            drive.CreateTargetVelocityAttr(0.0)
+        
+        logger.info(f"Applied DriveAPI ({drive_name}) to {joint_prim.GetPath()}: "
+                    f"stiffness={stiffness}, damping={damping}, max_force={max_force}")
+
+
+# Singleton instance
+physics_injector = PhysicsInjector()

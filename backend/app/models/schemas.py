@@ -1,0 +1,176 @@
+"""
+Pydantic schemas for Phidias Articulation MVP.
+
+Defines data models for:
+- Part: Individual mesh parts with semantic labels
+- Joint: Articulation joints between parts  
+- ArticulationData: Complete model data for USD export
+- UploadResponse: API response after GLB upload
+- ExportRequest/Response: USD export request/response
+"""
+
+from typing import List, Literal, Tuple, Optional
+from pydantic import BaseModel, Field
+
+
+class Part(BaseModel):
+    """
+    Represents a single mesh part in the model.
+    
+    Attributes:
+        id: Unique identifier for the part (usually mesh name from GLB)
+        name: Human-readable name for the part
+        type: Semantic type of the part
+            - link: A rigid body that moves
+            - joint: A joint connector (rarely used as part type)
+            - base: Fixed/root part of the assembly
+            - tool: End effector or tool attachment
+        role: Functional role of the part
+            - actuator: Part that applies force/motion
+            - support: Structural support element
+            - gripper: Grasping mechanism
+            - sensor: Sensor mount or housing
+            - other: Uncategorized
+        mobility: How the part can move
+            - fixed: Cannot move relative to parent
+            - revolute: Rotates around an axis
+            - prismatic: Slides along an axis
+    """
+    id: str = Field(..., description="Unique part identifier from mesh name")
+    name: str = Field(..., description="Display name for the part")
+    type: Literal["link", "joint", "base", "tool"] = Field(
+        default="link", 
+        description="Semantic type of the part"
+    )
+    role: Literal["actuator", "support", "gripper", "sensor", "other"] = Field(
+        default="other",
+        description="Functional role of the part"
+    )
+    mobility: Literal["fixed", "revolute", "prismatic"] = Field(
+        default="fixed",
+        description="Movement capability of the part"
+    )
+
+
+class Joint(BaseModel):
+    """
+    Represents an articulation joint connecting two parts.
+    
+    Joints define the kinematic relationship between parent and child parts.
+    The joint axis defines the direction of rotation (revolute) or 
+    translation (prismatic).
+    
+    Attributes:
+        name: Unique name for the joint
+        parent: ID of the parent part
+        child: ID of the child part
+        type: Joint type
+            - fixed: No relative motion allowed
+            - revolute: Rotation around axis
+            - prismatic: Translation along axis
+        axis: Direction vector for joint motion [x, y, z]
+        lower_limit: Lower limit in radians (revolute) or meters (prismatic)
+        upper_limit: Upper limit in radians (revolute) or meters (prismatic)
+        
+        # Drive parameters (for motor/controller)
+        drive_stiffness: Position gain (spring constant) for PD control
+        drive_damping: Velocity gain (damping) for PD control
+        drive_max_force: Maximum force/torque the drive can apply
+        drive_type: Type of drive control (position, velocity, or none)
+    """
+    name: str = Field(..., description="Unique joint name")
+    parent: str = Field(..., description="Parent part ID")
+    child: str = Field(..., description="Child part ID")
+    type: Literal["fixed", "revolute", "prismatic"] = Field(
+        default="revolute",
+        description="Joint type"
+    )
+    axis: Tuple[float, float, float] = Field(
+        default=(0, 0, 1),
+        description="Joint axis direction [x, y, z]"
+    )
+    
+    # Joint limits
+    lower_limit: Optional[float] = Field(
+        default=-180.0,
+        description="Lower motion limit (degrees for revolute, meters for prismatic)"
+    )
+    upper_limit: Optional[float] = Field(
+        default=180.0,
+        description="Upper motion limit (degrees for revolute, meters for prismatic)"
+    )
+    
+    # Drive parameters
+    drive_stiffness: Optional[float] = Field(
+        default=1000.0,
+        description="Position drive stiffness (spring constant)"
+    )
+    drive_damping: Optional[float] = Field(
+        default=100.0,
+        description="Velocity drive damping"
+    )
+    drive_max_force: Optional[float] = Field(
+        default=1000.0,
+        description="Maximum drive force/torque"
+    )
+    drive_type: Literal["position", "velocity", "none"] = Field(
+        default="position",
+        description="Drive control type"
+    )
+
+
+class ArticulationData(BaseModel):
+    """
+    Complete articulation data for USD export.
+    
+    Contains all parts and joints needed to generate a physics-enabled
+    USD file compatible with NVIDIA Isaac Sim.
+    """
+    model_name: str = Field(
+        default="robot",
+        description="Name for the USD root prim"
+    )
+    parts: List[Part] = Field(
+        default_factory=list,
+        description="List of all parts in the model"
+    )
+    joints: List[Joint] = Field(
+        default_factory=list,
+        description="List of all joints in the model"
+    )
+
+
+class ParsedPart(BaseModel):
+    """
+    Part info returned after parsing a GLB file.
+    Includes geometric info for display purposes.
+    """
+    id: str
+    name: str
+    vertex_count: int = 0
+    face_count: int = 0
+    bounds_min: Tuple[float, float, float] = (0, 0, 0)
+    bounds_max: Tuple[float, float, float] = (0, 0, 0)
+
+
+class UploadResponse(BaseModel):
+    """Response after successfully uploading a GLB file."""
+    success: bool
+    message: str
+    filename: str
+    model_url: str  # URL to access the uploaded GLB
+    parts: List[ParsedPart]  # Parsed parts from the model
+
+
+class ExportRequest(BaseModel):
+    """Request to export articulation data to USD."""
+    glb_filename: str = Field(..., description="Original GLB filename")
+    articulation: ArticulationData
+
+
+class ExportResponse(BaseModel):
+    """Response after USD export."""
+    success: bool
+    message: str
+    download_url: Optional[str] = None
+    filename: Optional[str] = None
