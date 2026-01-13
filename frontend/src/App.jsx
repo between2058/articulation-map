@@ -119,14 +119,17 @@ function App() {
                         className="btn btn-primary"
                         onClick={handleExport}
                         disabled={!canExport}
+                        title="Generate Sim-Ready USD and Publish to PegaVerse"
                     >
                         {isExporting ? (
                             <>
                                 <span className="loading-spinner" style={{ width: '16px', height: '16px' }} />
-                                Exporting...
+                                Publishing...
                             </>
                         ) : (
-                            <>Export USD</>
+                            <>
+                                🚀 Publish to PEGAVERSE
+                            </>
                         )}
                     </button>
 
