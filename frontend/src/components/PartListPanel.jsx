@@ -97,7 +97,25 @@ export function PartListPanel({
                                 {part.name}
                             </div>
                             <div className="part-item-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                                <span>{part.vertexCount?.toLocaleString() || 0} verts</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {part.vertexCount?.toLocaleString() || 0} verts
+                                    {!part.isWatertight && (
+                                        <span
+                                            title="Mesh info: Open geometry detected. Physics will auto-seal holes. Manual review recommended for precision."
+                                            style={{
+                                                cursor: 'help',
+                                                fontSize: '14px', // Slightly larger
+                                                marginLeft: '4px',
+                                                padding: '0 4px', // Increase hit area
+                                                filter: 'grayscale(100%) opacity(0.6)',
+                                                display: 'inline-block', // Ensure padding works
+                                                userSelect: 'none' // Prevent text selection
+                                            }}
+                                        >
+                                            ℹ️
+                                        </span>
+                                    )}
+                                </span>
                                 {getMaterialDisplay(part)}
                             </div>
                         </div>

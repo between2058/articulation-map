@@ -191,6 +191,7 @@ class ParsedPart(BaseModel):
     face_count: int = 0
     bounds_min: Tuple[float, float, float] = (0, 0, 0)
     bounds_max: Tuple[float, float, float] = (0, 0, 0)
+    is_watertight: bool = True  # Whether the mesh is closed/manifold
 
 
 class UploadResponse(BaseModel):

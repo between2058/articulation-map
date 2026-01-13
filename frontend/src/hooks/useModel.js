@@ -23,6 +23,8 @@ const createDefaultPart = (parsed) => ({
     faceCount: parsed.face_count || 0,
     boundsMin: parsed.bounds_min || [0, 0, 0],
     boundsMax: parsed.bounds_max || [0, 0, 0],
+    isWatertight: parsed.is_watertight ?? true, // Default to true if undefined
+    wasRepaired: parsed.was_repaired ?? false, // Whether auto-repair was attempted
     // Mass properties
     mass: null,  // null = auto-compute from density
     density: 1000,  // kg/m³ (water density as default)
@@ -277,6 +279,47 @@ export function useModel() {
             setIsExporting(false);
         }
     }, [modelFilename, modelName, parts, joints]);
+
+    /**
+     * Repair a specific part mesh
+     */
+    const repairPart = useCallback(async (partId) => {
+        if (!modelFilename) {
+            throw new Error("No model loaded");
+        }
+
+        const response = await fetch('/api/repair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                filename: modelFilename,
+                part_id: partId
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Repair failed");
+        }
+
+        const updatedInfo = await response.json();
+
+        // Update valid parts list
+        setParts(prev => prev.map(p => {
+            if (p.id === partId) {
+                return {
+                    ...p,
+                    vertexCount: updatedInfo.vertex_count,
+                    faceCount: updatedInfo.face_count,
+                    isWatertight: updatedInfo.is_watertight,
+                    wasRepaired: updatedInfo.was_repaired
+                };
+            }
+            return p;
+        }));
+
+        return updatedInfo;
+    }, [modelFilename]);
 
     /**
      * Reset the entire state

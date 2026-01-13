@@ -163,13 +163,24 @@ class GLBParser:
         # Get bounding box
         bounds = mesh.bounds if mesh.bounds is not None else np.zeros((2, 3))
         
+        # Check if mesh is watertight (closed/manifold)
+        # Some meshes might be None or empty, so handle safely
+        is_watertight = False
+        try:
+            if mesh.is_watertight:
+                is_watertight = True
+        except Exception:
+            # If check fails, assume not watertight
+            pass
+        
         return ParsedPart(
             id=part_id,
             name=name,
             vertex_count=len(mesh.vertices) if mesh.vertices is not None else 0,
             face_count=len(mesh.faces) if mesh.faces is not None else 0,
             bounds_min=tuple(bounds[0].tolist()),
-            bounds_max=tuple(bounds[1].tolist())
+            bounds_max=tuple(bounds[1].tolist()),
+            is_watertight=is_watertight
         )
     
     def _generate_unique_id(self, base_name: str, used_names: set) -> str:
