@@ -32,6 +32,9 @@ const createDefaultPart = (parsed) => ({
     staticFriction: 0.5,
     dynamicFriction: 0.5,
     restitution: 0.0,
+    // Material Library State
+    materialId: null,      // ID from MATERIAL_PRESETS
+    isMaterialCustom: false, // True if properties were modified after applying preset
 });
 
 // Default joint structure

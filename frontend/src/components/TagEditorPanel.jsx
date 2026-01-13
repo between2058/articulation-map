@@ -26,7 +26,15 @@ export function TagEditorPanel({
     }
 
     const handleChange = (field, value) => {
-        onUpdatePart(selectedPart.id, { [field]: value });
+        const updates = { [field]: value };
+
+        // If updating physics props and a material preset is active, mark as custom
+        const physicsFields = ['mass', 'density', 'staticFriction', 'dynamicFriction', 'restitution'];
+        if (physicsFields.includes(field) && selectedPart.materialId) {
+            updates.isMaterialCustom = true;
+        }
+
+        onUpdatePart(selectedPart.id, updates);
     };
 
     return (
@@ -220,6 +228,8 @@ export function TagEditorPanel({
                 <label className="form-label" style={{ color: 'var(--accent-primary)' }}>
                     🧶 Physics Material
                 </label>
+
+
 
                 <div className="flex gap-sm">
                     <div className="form-group" style={{ flex: 1 }}>

@@ -15,11 +15,12 @@ import { FileUploader } from './components/FileUploader';
 import { SceneViewer } from './components/SceneViewer';
 import { PartListPanel } from './components/PartListPanel';
 import { TagEditorPanel } from './components/TagEditorPanel';
+import { MaterialLibraryPanel } from './components/MaterialLibraryPanel';
 import { JointEditorPanel } from './components/JointEditorPanel';
 
 function App() {
     // Right panel tab state
-    const [activeTab, setActiveTab] = useState('tags');
+    const [activeTab, setActiveTab] = useState('materials');
 
     // Model state from custom hook
     const {
@@ -179,10 +180,16 @@ function App() {
                     {/* Tabs */}
                     <div className="tabs">
                         <button
-                            className={`tab ${activeTab === 'tags' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('tags')}
+                            className={`tab ${activeTab === 'materials' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('materials')}
                         >
-                            Tags
+                            Materials
+                        </button>
+                        <button
+                            className={`tab ${activeTab === 'properties' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('properties')}
+                        >
+                            Properties
                         </button>
                         <button
                             className={`tab ${activeTab === 'joints' ? 'active' : ''}`}
@@ -193,7 +200,12 @@ function App() {
                     </div>
 
                     <div className="panel-content">
-                        {activeTab === 'tags' ? (
+                        {activeTab === 'materials' ? (
+                            <MaterialLibraryPanel
+                                selectedPart={selectedPart}
+                                onUpdatePart={updatePart}
+                            />
+                        ) : activeTab === 'properties' ? (
                             <TagEditorPanel
                                 selectedPart={selectedPart}
                                 onUpdatePart={updatePart}

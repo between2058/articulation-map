@@ -8,6 +8,8 @@
 
 import React from 'react';
 
+import { MATERIAL_PRESETS } from '../data/materials';
+
 // Icon mapping for part types
 const typeIcons = {
     link: '🔗',
@@ -31,6 +33,31 @@ export function PartListPanel({
     selectedPartId,
     onSelectPart
 }) {
+    // ... empty state logic ...
+
+    // Helper to get material display
+    const getMaterialDisplay = (part) => {
+        if (!part.materialId) return null;
+        const preset = MATERIAL_PRESETS.find(m => m.id === part.materialId);
+        if (!preset) return null;
+
+        return (
+            <span style={{
+                fontSize: '9px',
+                color: part.isMaterialCustom ? 'var(--accent-warning)' : 'var(--text-secondary)',
+                background: 'rgba(255,255,255,0.05)',
+                padding: '1px 4px',
+                borderRadius: '3px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                marginLeft: 'auto' // Push to right if in flex container
+            }} title={part.isMaterialCustom ? "Customized Material" : "Standard Material"}>
+                {preset.name}
+                {part.isMaterialCustom && '*'}
+            </span>
+        );
+    };
+
     if (parts.length === 0) {
         return (
             <div className="empty-state">
@@ -66,9 +93,12 @@ export function PartListPanel({
                         </div>
 
                         <div className="part-item-info">
-                            <div className="part-item-name">{part.name}</div>
-                            <div className="part-item-meta">
-                                {part.vertexCount?.toLocaleString() || 0} vertices
+                            <div className="part-item-name">
+                                {part.name}
+                            </div>
+                            <div className="part-item-meta" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                <span>{part.vertexCount?.toLocaleString() || 0} verts</span>
+                                {getMaterialDisplay(part)}
                             </div>
                         </div>
 
